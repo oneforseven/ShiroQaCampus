@@ -1,0 +1,44 @@
+### CUSTOM ###
+application-local.yml
+
+# 运行期产物与临时调试文件（会话记忆、生成的 PDF、下载文件、验证脚本等）
+tmp/
+
+# Maven / 测试运行的临时日志（排查用，不入库）
+mvn-test-*.log
+*.dump
+*.dumpstream
+
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
