@@ -1,0 +1,126 @@
+spring:
+  application:
+    name: shiro-ai-agent
+  profiles:
+    active: local
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  # ============================================================
+  # 文件上传：知识库文档（Markdown）
+  #   Spring Boot 默认单文件上限只有 1MB，这里放宽到 5MB
+  #   （业务侧还有同样的 5MB 校验，见 KbDocumentService）
+  #   落盘目录默认 tmp/kb，可用 campus.kb.upload-dir 覆盖
+  # ============================================================
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+  # ============================================================
+  # Redis：会话存储（Sa-Token）+ 问答缓存
+  #   ⚠️ 本项目使用【独立 Redis 实例】（端口 6380），
+  #      与学习用的 redis-study（6379）完全隔离。
+  #      启动：docker compose up -d shiro-redis
+  # ============================================================
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+      database: 0
+      password: ${REDIS_PASSWORD:}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 3000ms
+
+  ai:
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1536                  # 维度
+        max-document-batch-size: 10000
+    mcp:
+      client:
+        stdio:
+          servers-configuration: classpath:mcp-servers.json
+
+
+server:
+  port: 8123
+  servlet:
+    context-path: /api
+
+# springdoc-openapi ??????
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.shiro.shiroaiagent.controller
+# knife4j 配置
+# enable=false：knife4j 的增强模式在 Spring Boot 3.4 上容易触发 OpenAPI 兼容问题，
+# 关闭后不影响文档浏览与接口调试（Knife4j 官方 issue #874 的推荐做法）。
+knife4j:
+  enable: false
+  setting:
+    language: zh_cn
+# searchAPI
+search-api:
+  api-key: ${SEARCH_API_KEY}
+# 修改日志级别，查看Spring AI 更多调用细节
+logging:
+  level:
+    org.springframework.ai: DEBUG
+
+# ============================================================
+# 业务层配置（校园问答系统）
+# ============================================================
+
+# MyBatis-Plus：业务库访问
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true       # 数据库 snake_case ↔ Java camelCase 自动映射
+    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl   # 开发期想在控制台看 SQL，打开这行
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto                          # 主键使用数据库自增（BIGSERIAL）
+
+# Sa-Token：登录鉴权
+#   ⚠️ 加装 sa-token-redis-jackson 依赖后，会话（token → 用户信息）会自动存到 Redis，
+#   业务代码无需改动。作用：① 应用重启登录态不丢；② 多实例部署时会话共享。
+sa-token:
+  token-name: satoken                        # 前端携带 token 的请求头/参数名
+  timeout: 2592000                           # 登录有效期（秒），默认 30 天
+  active-timeout: -1                         # 不限制无操作过期
+  is-concurrent: true                        # 允许同一账号多端登录
+  token-style: uuid
+  is-log: false
+
+# ============================================================
+# 校园问答：检索参数与缓存策略
+# ============================================================
+campus:
+  qa:
+    top-k: 4                                 # 检索返回条数（实验 E3 变量）
+    similarity-threshold: 0.5                # 相似度阈值（实验 E3 变量）
+    doc-type: campus                         # 只检索校园语料的元数据标记
+    cache:
+      enabled: true                          # 缓存总开关（做"有/无缓存"对比实验时关掉）
+      knowledge-ttl-minutes: 1440            # 知识类答案缓存 24 小时
+      personal-ttl-minutes: 5                # 个人数据类缓存 5 分钟（成绩可能被修改）
