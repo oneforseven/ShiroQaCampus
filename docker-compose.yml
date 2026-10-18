@@ -1,0 +1,75 @@
+# ============================================================
+#  校园智能问答系统 · 基础设施
+# ============================================================
+#  包含三个容器：
+#    shiro-redis  —— 本项目的 Redis（会话存储 + 问答缓存）★ 本次新增
+#    shiro-pg     —— PostgreSQL + pgvector（业务库 + 向量库）
+#    （学习用的 redis-study 不在本文件内，保持独立，互不影响）
+#
+#  端口分配（避免与已有环境冲突）：
+#    6379  → 已被你的 redis-study 占用，本项目不用
+#    6380  → shiro-redis（本项目 Redis）
+#    15432 → shiro-pg（PostgreSQL，宿主机端口）
+#
+#  常用命令：
+#    docker compose up -d shiro-redis          # 只启动 Redis
+#    docker compose up -d                      # 启动全部
+#    docker compose logs -f shiro-redis        # 看日志
+#    docker compose down                       # 停止（保留数据卷）
+#    docker compose down -v                    # 停止并删除数据（慎用）
+#
+#  连接 Redis：
+#    docker exec -it shiro-redis redis-cli     # 进入命令行
+#    或宿主机：localhost:6380
+# ============================================================
+
+services:
+
+  # ---------------- 本项目 Redis：会话存储 + 问答缓存 ----------------
+  #  镜像用 redis:latest（本地已有，避免拉取 7-alpine 失败）
+  shiro-redis:
+    image: redis:latest
+    container_name: shiro-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"                      # 宿主机 6380 → 容器 6379
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - shiro-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ---------------- PostgreSQL + pgvector：业务库 + 向量库 ----------------
+  #  说明：与你现有的 shiro 容器等价，用 compose 固化下来便于统一管理。
+  #  若你继续用现有的 shiro 容器，可以不启动这个（避免端口冲突）。
+  shiro-pg:
+    image: pgvector/pgvector:pg18-trixie
+    container_name: shiro-pg
+    restart: unless-stopped
+    ports:
+      - "15433:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shiro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中设置}
+      POSTGRES_DB: ${POSTGRES_DB:-my_rag_db}
+    volumes:
+      - shiro-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shiro -d my_rag_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - with-pg                           # 默认不启动，需要时加 --profile with-pg
+
+volumes:
+  shiro-redis-data:
+  shiro-pg-data:
